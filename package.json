@@ -1,0 +1,7 @@
+{
+  "name": "gorest-postman-newman-tests",
+  "private": true,
+  "scripts": {
+    "test:api": "npx --yes newman@6.2.1 run gorest-users.postman_collection.json -e gorest-ci.postman_environment.json --env-var \"gorest_token=$GOREST_TOKEN\" --reporters cli,junit --reporter-junit-export newman-results.xml"
+  }
+}

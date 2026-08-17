@@ -1,0 +1,281 @@
+{
+  "info": {
+    "name": "GoREST Users API - QA suite",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "run_id", "value": "" },
+    { "key": "user_id", "value": "" },
+    { "key": "user_email", "value": "" },
+    { "key": "replacement_email", "value": "" },
+    { "key": "unauthorized_check_user_id", "value": "" },
+    { "key": "unauthorized_check_email", "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('run_id')) {",
+          "  pm.collectionVariables.set('run_id', pm.variables.replaceIn('{{$guid}}'));",
+          "}",
+          "pm.collectionVariables.set('user_email', 'qa.' + pm.collectionVariables.get('run_id') + '@example.test');",
+          "pm.collectionVariables.set('replacement_email', 'qa.replaced.' + pm.collectionVariables.get('run_id') + '@example.test');",
+          "pm.collectionVariables.set('unauthorized_check_email', 'qa.unauthorized.' + pm.collectionVariables.get('run_id') + '@example.test');"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Positive flow - CRUD user",
+      "item": [
+        {
+          "name": "Create a user",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"QA {{run_id}}\",\n  \"email\": \"{{user_email}}\",\n  \"gender\": \"female\",\n  \"status\": \"active\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{base_url}}/public/v2/users"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 201', () => pm.response.to.have.status(201));",
+            "const user = pm.response.json();",
+            "pm.test('response contains the created user', () => {",
+            "  pm.expect(user).to.include.keys('id', 'name', 'email', 'gender', 'status');",
+            "  pm.expect(user.email).to.eql(pm.collectionVariables.get('user_email'));",
+            "  pm.expect(user.status).to.eql('active');",
+            "});",
+            "pm.collectionVariables.set('user_id', user.id);"
+          ] } }]
+        },
+        {
+          "name": "Reject duplicate user email",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Duplicate QA {{run_id}}\",\n  \"email\": \"{{user_email}}\",\n  \"gender\": \"female\",\n  \"status\": \"active\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/public/v2/users" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 422', () => pm.response.to.have.status(422));",
+            "pm.test('duplicate email validation error is returned', () => pm.expect(pm.response.json().some(error => error.field === 'email')).to.eql(true));"
+          ] } }]
+        },
+        {
+          "name": "Get the created user",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "GET", "url": "{{base_url}}/public/v2/users/{{user_id}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 200', () => pm.response.to.have.status(200));",
+            "const user = pm.response.json();",
+            "pm.test('created user can be retrieved', () => pm.expect(user.email).to.eql(pm.collectionVariables.get('user_email')));"
+          ] } }]
+        },
+        {
+          "name": "Update the created user",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated QA {{run_id}}\",\n  \"status\": \"inactive\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{base_url}}/public/v2/users/{{user_id}}"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 200', () => pm.response.to.have.status(200));",
+            "const user = pm.response.json();",
+            "pm.test('requested fields are updated', () => {",
+            "  pm.expect(user.name).to.eql('Updated QA ' + pm.collectionVariables.get('run_id'));",
+            "  pm.expect(user.status).to.eql('inactive');",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Verify the updated user",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "GET", "url": "{{base_url}}/public/v2/users/{{user_id}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 200', () => pm.response.to.have.status(200));",
+            "pm.test('update persisted', () => pm.expect(pm.response.json().status).to.eql('inactive'));"
+          ] } }]
+        },
+        {
+          "name": "Replace the created user",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Replaced QA {{run_id}}\",\n  \"email\": \"{{replacement_email}}\",\n  \"gender\": \"male\",\n  \"status\": \"active\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{base_url}}/public/v2/users/{{user_id}}"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 200', () => pm.response.to.have.status(200));",
+            "pm.test('complete replacement is applied', () => {",
+            "  const user = pm.response.json();",
+            "  pm.expect(user.email).to.eql(pm.collectionVariables.get('replacement_email'));",
+            "  pm.expect(user.gender).to.eql('male');",
+            "  pm.expect(user.status).to.eql('active');",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Verify the replaced user",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "GET", "url": "{{base_url}}/public/v2/users/{{user_id}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 200', () => pm.response.to.have.status(200));",
+            "pm.test('replacement persisted', () => pm.expect(pm.response.json().email).to.eql(pm.collectionVariables.get('replacement_email')));"
+          ] } }]
+        },
+        {
+          "name": "Delete the created user",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "DELETE", "url": "{{base_url}}/public/v2/users/{{user_id}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 204', () => pm.response.to.have.status(204));"
+          ] } }]
+        },
+        {
+          "name": "Verify deleted user is unavailable",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "GET", "url": "{{base_url}}/public/v2/users/{{user_id}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 404', () => pm.response.to.have.status(404));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "Negative flow",
+      "item": [
+        {
+          "name": "Reject user without email",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Missing email\",\n  \"gender\": \"male\",\n  \"status\": \"active\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/public/v2/users" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 422', () => pm.response.to.have.status(422));",
+            "pm.test('email validation error is returned', () => {",
+            "  const errors = pm.response.json();",
+            "  pm.expect(errors).to.be.an('array');",
+            "  pm.expect(errors.some(error => error.field === 'email')).to.eql(true);",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Reject invalid email format",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Invalid email\",\n  \"email\": \"not-an-email\",\n  \"gender\": \"male\",\n  \"status\": \"active\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/public/v2/users" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 422', () => pm.response.to.have.status(422));",
+            "pm.test('email format error is returned', () => {",
+            "  const errors = pm.response.json();",
+            "  pm.expect(errors.some(error => error.field === 'email')).to.eql(true);",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Reject missing required fields",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"missing-fields@example.test\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/public/v2/users" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 422', () => pm.response.to.have.status(422));",
+            "pm.test('name, gender, and status errors are returned', () => {",
+            "  const fields = pm.response.json().map(error => error.field);",
+            "  pm.expect(fields).to.include.members(['name', 'gender', 'status']);",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Reject invalid gender and status values",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Invalid enum\",\n  \"email\": \"invalid-enum@example.test\",\n  \"gender\": \"unknown\",\n  \"status\": \"pending\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/public/v2/users" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 422', () => pm.response.to.have.status(422));",
+            "pm.test('gender and status validation errors are returned', () => {",
+            "  const fields = pm.response.json().map(error => error.field);",
+            "  pm.expect(fields).to.include.members(['gender', 'status']);",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Reject malformed JSON body",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{ \"name\": \"Malformed JSON\"", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/public/v2/users" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('malformed JSON is rejected', () => pm.expect([400, 422]).to.include(pm.response.code));"] } }]
+        },
+        {
+          "name": "Reject unsupported content type",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "text/plain" }], "body": { "mode": "raw", "raw": "plain text", "options": { "raw": { "language": "text" } } }, "url": "{{base_url}}/public/v2/users" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('unsupported content type is rejected', () => pm.expect([400, 415, 422]).to.include(pm.response.code));"] } }]
+        },
+        {
+          "name": "Reject request without authentication",
+          "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Unauthenticated user\",\n  \"email\": \"unauthenticated@example.test\",\n  \"gender\": \"male\",\n  \"status\": \"active\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/public/v2/users" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 401', () => pm.response.to.have.status(401));"] } }]
+        },
+        {
+          "name": "Create user for unauthorized operation checks",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Unauthorized check {{run_id}}\",\n  \"email\": \"{{unauthorized_check_email}}\",\n  \"gender\": \"male\",\n  \"status\": \"active\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/public/v2/users" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('unauthorized_check_user_id', pm.response.json().id);"
+          ] } }]
+        },
+        {
+          "name": "Hide user from unauthenticated update",
+          "request": { "auth": { "type": "noauth" }, "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"status\": \"inactive\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/public/v2/users/{{unauthorized_check_user_id}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 404', () => pm.response.to.have.status(404));"] } }]
+        },
+        {
+          "name": "Hide user from unauthenticated delete",
+          "request": { "auth": { "type": "noauth" }, "method": "DELETE", "url": "{{base_url}}/public/v2/users/{{unauthorized_check_user_id}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 404', () => pm.response.to.have.status(404));"] } }]
+        },
+        {
+          "name": "Delete unauthorized operation check user",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "DELETE", "url": "{{base_url}}/public/v2/users/{{unauthorized_check_user_id}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 204', () => pm.response.to.have.status(204));"] } }]
+        },
+        {
+          "name": "Reject invalid bearer token",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "definitely-not-a-valid-token", "type": "string" }] }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Invalid token\",\n  \"email\": \"invalid-token@example.test\",\n  \"gender\": \"male\",\n  \"status\": \"active\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/public/v2/users" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 401', () => pm.response.to.have.status(401));"] } }]
+        },
+        {
+          "name": "Reject unsupported method on users collection",
+          "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{gorest_token}}", "type": "string" }] }, "method": "PUT", "url": "{{base_url}}/public/v2/users" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('unsupported method is rejected', () => pm.expect([404, 405]).to.include(pm.response.code));"] } }]
+        }
+      ]
+    },
+    {
+      "name": "Public read-only checks",
+      "item": [
+        {
+          "name": "List users with pagination",
+          "request": { "method": "GET", "url": "{{base_url}}/public/v2/users?page=1&per_page=5" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 200', () => pm.response.to.have.status(200));",
+            "pm.test('response is a page of users', () => {",
+            "  const users = pm.response.json();",
+            "  pm.expect(users).to.be.an('array');",
+            "  pm.expect(users.length).to.be.at.most(5);",
+            "  if (users.length) pm.expect(users[0]).to.include.keys('id', 'name', 'email', 'gender', 'status');",
+            "});",
+            "pm.test('pagination headers are available', () => pm.expect(pm.response.headers.get('X-Pagination-Page')).to.exist);"
+          ] } }]
+        },
+        {
+          "name": "Filter users by gender and status",
+          "request": { "method": "GET", "url": "{{base_url}}/public/v2/users?gender=male&status=active&per_page=5" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 200', () => pm.response.to.have.status(200));",
+            "pm.test('all returned users satisfy the filters', () => {",
+            "  pm.response.json().forEach(user => {",
+            "    pm.expect(user.gender).to.eql('male');",
+            "    pm.expect(user.status).to.eql('active');",
+            "  });",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Unknown user returns 404",
+          "request": { "method": "GET", "url": "{{base_url}}/public/v2/users/999999999" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 404', () => pm.response.to.have.status(404));"] } }]
+        },
+        {
+          "name": "Non-numeric user id returns 404",
+          "request": { "method": "GET", "url": "{{base_url}}/public/v2/users/not-a-number" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 404', () => pm.response.to.have.status(404));"] } }]
+        }
+      ]
+    }
+  ]
+}

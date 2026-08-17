@@ -1,0 +1,28 @@
+name: Newman API tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  users-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Newman
+        run: npm install --no-save newman@6.2.1
+      - name: Run GoREST users suite
+        env:
+          GOREST_TOKEN: ${{ secrets.GOREST_TOKEN }}
+        run: npm run test:api
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newman-report
+          path: newman-results.xml
+          if-no-files-found: warn
