@@ -2,6 +2,8 @@
 
 This repository contains an automated test suite for the public [GoREST Users API](https://gorest.co.in/). It covers a complete authenticated CRUD chain plus representative negative and public-read cases.
 
+See [TEST_CASES.md](TEST_CASES.md) for the request-by-request coverage summary.
+
 ## Coverage
 
 - Positive chain: create → duplicate-email check → retrieve → `PATCH` → `PUT` → verify → delete → confirm `404`
